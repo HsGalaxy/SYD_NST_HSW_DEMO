@@ -369,3 +369,16 @@ async function runGeneticAlgorithm(annotationData, popSize, generations, mutatio
     const viz3DButton = document.querySelector('.tab-button[data-tab="visualization3d"]');
     if (viz3DButton) {
         viz3DButton.click(); // Activate 3D tab
+    }
+    // Ensure 3D map is ready then display
+    setTimeout(() => { // Give a moment for tab switch and potential 3D map init
+        if (cesiumViewer) {
+            displayRouteIn3D(bestRouteOverall.route, annotationData.constraints);
+        } else {
+            console.warn("Cesium viewer not ready for final display after GA.");
+            // Optionally, queue this display for when Cesium is ready
+        }
+    }, 200);
+
+    return bestRouteOverall;
+}
