@@ -3,43 +3,91 @@ document.addEventListener('DOMContentLoaded', () => {
     const tabs = document.querySelectorAll('.tab-button');
     const tabContents = document.querySelectorAll('.tab-content');
 
-    // Initialize maps after a short delay to allow loader to show
-    // setTimeout(() => { // No longer needed if loader hides after init
-        try {
-            initAnnotationMap();
-            initGAMap(); // Initialize GA map (can be deferred until tab is clicked)
-            // init3DMap(); // Defer 3D map initialization until its tab is clicked to save resources
-        } catch (error) {
-            console.error("Error initializing maps:", error);
-            alert("地图初始化失败，请检查浏览器控制台获取更多信息。");
-        } finally {
-            loader.style.opacity = '0';
-            setTimeout(() => loader.style.display = 'none', 500); // Hide after fade
-        }
-    // }, 100);
+    let gaMapInitialized = false; // Flag to check if GA map has been initialized
+    let annotationMapInitialized = false; // Flag for annotation map (though it's init early)
+    let cesiumMapInitialized = false; // Flag for Cesium map
 
+    // Initial map initializations
+    try {
+        initAnnotationMap(); // Annotation map is on the first tab, so initialize it
+        annotationMapInitialized = true; 
+        // initGAMap(); // Defer GA map initialization
+        // init3DMap(); // Defer Cesium map initialization
+    } catch (error) {
+        console.error("Error initializing maps on load:", error);
+        alert("地图初始化失败，请检查浏览器控制台获取更多信息。");
+    } finally {
+        if (loader) {
+            loader.style.opacity = '0';
+            setTimeout(() => loader.style.display = 'none', 500);
+        }
+    }
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
+            // Deactivate all tabs and content
             tabs.forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
+            tabContents.forEach(content => content.classList.remove('active'));
 
-            const targetTab = tab.dataset.tab;
-            tabContents.forEach(content => {
-                content.classList.remove('active');
-                if (content.id === targetTab) {
-                    content.classList.add('active');
-                    if (targetTab === 'visualization3d' && !cesiumViewer) {
-                        init3DMap(); // Initialize 3D map when tab is first opened
-                    }
+            // Activate clicked tab and its content
+            tab.classList.add('active');
+            const targetTabId = tab.dataset.tab;
+            const activeContent = document.getElementById(targetTabId);
+            if (activeContent) {
+                activeContent.classList.add('active');
+            }
+
+            // Handle map specific logic when a tab becomes active
+            if (targetTabId === 'annotation') {
+                if (annotationMap) {
+                    setTimeout(() => { // Ensure DOM is ready and visible
+                        annotationMap.invalidateSize();
+                    }, 0);
                 }
-            });
+            } else if (targetTabId === 'optimization') {
+                if (!gaMapInitialized) {
+                    initGAMap(); // Initialize GA map on first click
+                    gaMapInitialized = true;
+                } else if (gaMap) {
+                    setTimeout(() => { // Ensure DOM is ready and visible
+                        gaMap.invalidateSize();
+                    }, 0);
+                }
+            } else if (targetTabId === 'visualization3d') {
+                if (!cesiumMapInitialized) {
+                    init3DMap(); // Initialize Cesium map on first click
+                    cesiumMapInitialized = true;
+                } else if (cesiumViewer) {
+                    // Cesium might not need invalidateSize in the same way,
+                    // but if there were sizing issues, you could try viewer.resize()
+                    // For now, just ensuring it's initialized is key.
+                }
+            }
         });
     });
 
     document.getElementById('run-ga').addEventListener('click', async () => {
         const annotationData = getAnnotationData();
-        if (!annotationData) return;
+        if (!annotationData) {
+            alert("请先在“智能标注”标签页完成标注并设置起终点。");
+            return;
+        }
+
+        // Ensure GA map is initialized before running GA
+        if (!gaMapInitialized) {
+             // If user directly clicks "Run GA" without visiting the tab first (e.g. via code)
+            const optimizationTabButton = document.querySelector('.tab-button[data-tab="optimization"]');
+            if(optimizationTabButton) optimizationTabButton.click(); // Simulate tab click to initialize map
+
+            // Wait a moment for map to initialize if it was just triggered
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            if(!gaMapInitialized) { // Still not initialized, something is wrong
+                alert("优化地图未能初始化，请先切换到“算法优化”标签页。");
+                return;
+            }
+        }
+
 
         const popSize = parseInt(document.getElementById('population-size').value);
         const generations = parseInt(document.getElementById('generations').value);
@@ -50,10 +98,26 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Switch to optimization tab if not already there
-        document.querySelector('.tab-button[data-tab="optimization"]').click();
+        // Switch to optimization tab view if not already there (visual feedback)
+        const optimizationTabButton = document.querySelector('.tab-button[data-tab="optimization"]');
+        if (optimizationTabButton && !optimizationTabButton.classList.contains('active')) {
+            optimizationTabButton.click();
+        }
+        
+        // Ensure the GA map view is updated if it was initialized hidden
+        if (gaMap) {
+            setTimeout(() => {
+                gaMap.invalidateSize();
+            }, 0);
+        }
+
 
         const bestRoute = await runGeneticAlgorithm(annotationData, popSize, generations, mutationRate);
-        // The runGeneticAlgorithm function now handles displaying the route in 3D after completion
+        if (bestRoute) {
+             // The runGeneticAlgorithm function now handles displaying the route in 3D after completion
+            console.log("GA finished, best route:", bestRoute);
+        } else {
+            console.log("GA did not return a best route or was cancelled.");
+        }
     });
 });
