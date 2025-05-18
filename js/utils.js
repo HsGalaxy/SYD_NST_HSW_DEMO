@@ -1,5 +1,5 @@
 // Utility functions
-functiontoRadians(degrees) {
+function toRadians(degrees) {
     return degrees * Math.PI / 180;
 }
 
