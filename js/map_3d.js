@@ -2,7 +2,7 @@
 let cesiumViewer;
 
 // Cesium ion access token (replace with your own if needed, or use default)
-Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJjZGU2MjgwYy01MTg0LTRkYmMtYTUxZS04ZWI1ZDA5MWFhODAiLCJpZCI6MjEzNjQ3LCJpYXQiOjE3MTU5MzM3MDd9.y01kC8g13KyY0sTkE2o9J2qOCFMZcMUE8gVj7Lg2Yq0'; // Example token
+Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJhZjVjMjJhMS0wNWJiLTRmZjYtYmUxOS1jNzJkNzc1YTEyZmUiLCJpZCI6MzAzNDg5LCJpYXQiOjE3NDc1NjI4MTR9.7AsIMXnLLyfiiYxF9JPFbcZuJoauBam46tnEaVpwtqg'; // Example token
 
 function init3DMap() {
     if (cesiumViewer) {
