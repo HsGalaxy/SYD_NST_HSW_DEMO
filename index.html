@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智绘高铁 - AI驱动的多维约束选线平台</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <link href="libs/cesium/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="app-loader">
+        <div class="loader-text">智绘高铁 加载中...</div>
+        <div class="spinner"></div>
+    </div>
+
+    <header>
+        <h1>智绘高铁</h1>
+        <p>AI驱动的多维约束选线平台</p>
+    </header>
+
+    <nav id="tabs">
+        <button class="tab-button active" data-tab="annotation">1. 智能标注</button>
+        <button class="tab-button" data-tab="optimization">2. 算法优化</button>
+        <button class="tab-button" data-tab="visualization3d">3. 3D展示</button>
+    </nav>
+
+    <main>
+        <section id="annotation" class="tab-content active">
+            <h2>步骤一：定义约束与起终点</h2>
+            <div class="controls-annotation">
+                <div class="control-group">
+                    <label for="annotation-type">选择标注类型：</label>
+                    <select id="annotation-type">
+                        <option value="urban_attractor" data-weight="-100" data-color="#4CAF50">城市区域 (吸引)</option>
+                        <option value="difficult_terrain_repulsor" data-weight="200" data-color="#FF9800">复杂地形 (避让)</option>
+                        <option value="protected_zone_repulsor" data-weight="1000" data-color="#f44336">生态保护区 (强避让)</option>
+                        <option value="water_body_repulsor" data-weight="150" data-color="#2196F3">水体 (避让)</option>
+                        <option value="industrial_hub_attractor" data-weight="-50" data-color="#795548">工业枢纽 (吸引)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <button id="set-start-point">设置起点</button>
+                    <button id="set-end-point">设置终点</button>
+                    <span id="start-point-coords">起点: 未设置</span>
+                    <span id="end-point-coords">终点: 未设置</span>
+                </div>
+                 <p class="instructions">
+                    使用左侧工具栏绘制点、线、面。绘制完成后，会自动应用上方选定的类型。<br>
+                    点击 "设置起点/终点" 按钮后，在地图上单击选择位置。
+                </p>
+            </div>
+            <div id="map-annotation" class="map-container"></div>
+        </section>
+
+        <section id="optimization" class="tab-content">
+            <h2>步骤二：遗传算法优化路线</h2>
+            <div class="controls-optimization">
+                <button id="run-ga">开始优化</button>
+                <div class="ga-params">
+                    <label for="population-size">种群数量:</label>
+                    <input type="number" id="population-size" value="50" min="10" max="200">
+                    <label for="generations">迭代次数:</label>
+                    <input type="number" id="generations" value="100" min="10" max="500">
+                    <label for="mutation-rate">变异率:</label>
+                    <input type="number" id="mutation-rate" value="0.1" min="0.01" max="1" step="0.01">
+                </div>
+            </div>
+            <div id="ga-progress">
+                <p>当前迭代: <span id="current-generation">0</span>/<span id="total-generations">0</span></p>
+                <p>最佳适应度: <span id="best-fitness">N/A</span></p>
+                <div class="progress-bar-container">
+                    <div id="ga-progress-bar"></div>
+                </div>
+            </div>
+            <div id="map-optimization" class="map-container-small"></div>
+            <div id="fitness-chart-container">
+                <canvas id="fitness-chart"></canvas>
+            </div>
+        </section>
+
+        <section id="visualization3d" class="tab-content">
+            <h2>步骤三：最终路线3D展示</h2>
+            <p class="instructions">在此查看优化后的最佳高铁线路在三维地形中的效果。可以缩放、平移、旋转视角。</p>
+            <div id="cesiumContainer" class="map-container"></div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 智绘高铁项目. 纯前端演示版.</p>
+    </footer>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script src="libs/cesium/Build/Cesium/Cesium.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/map_annotation.js"></script>
+    <script src="js/genetic_algorithm.js"></script>
+    <script src="js/map_3d.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
