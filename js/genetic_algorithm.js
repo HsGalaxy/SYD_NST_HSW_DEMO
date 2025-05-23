@@ -22,7 +22,7 @@ function initGAMap() {
     } catch (e) {
         console.error("Error initializing GA map:", e);
         const mapDiv = document.getElementById('map-optimization');
-        if (mapDiv) mapDiv.innerHTML = "<p style='color:red; padding:10px;'>GA地图加载失败: " + e.message + "</p>";
+        if (mapDiv) mapDiv.innerHTML = "<p style='color:red; padding:10px;'>GA Map Load Failed: " + e.message + "</p>";
     }
 }
 
@@ -174,19 +174,19 @@ function updateFitnessChart(generation, bestFitnessThisGen, avgFitness) {
                 labels: [], // Generation numbers
                 datasets: [
                     {
-                        label: '本代最佳适应度',
+                        label: 'Best Fitness (This Gen)',
                         data: [],
                         borderColor: 'rgb(75, 192, 192)', // Cyan
                         tension: 0.1
                     },
                     {
-                        label: '平均适应度',
+                        label: 'Average Fitness',
                         data: [],
                         borderColor: 'rgb(255, 159, 64)', // Orange
                         tension: 0.1
                     },
                     {
-                        label: '全局最佳适应度',
+                        label: 'Overall Best Fitness',
                         data: [],
                         borderColor: 'rgb(255, 99, 132)', // Pink/Red
                         tension: 0.1,
@@ -200,10 +200,10 @@ function updateFitnessChart(generation, bestFitnessThisGen, avgFitness) {
                 scales: { 
                     y: { 
                         beginAtZero: false, // Fitness might not start at 0
-                        title: { display: true, text: '适应度值' }
+                        title: { display: true, text: 'Fitness Value' }
                     },
                     x: {
-                        title: { display: true, text: '迭代代数' }
+                        title: { display: true, text: 'Generation' }
                     }
                 },
                 animation: { duration: 300 } // Smooth updates
@@ -228,11 +228,11 @@ function updateFitnessChart(generation, bestFitnessThisGen, avgFitness) {
 
 async function runGeneticAlgorithm(annotationData, popSize, generations, mutationRate) {
     if (gaRunning) {
-        alert("遗传算法已在运行中！");
+        alert("Genetic algorithm is already running!");
         return null;
     }
     if(!gaMap) {
-        alert("优化地图未初始化，请先切换到优化标签页。");
+        alert("Optimization map not initialized. Please switch to the Optimization tab first.");
         initGAMap(); // Try to initialize it
         if(!gaMap) return null; // Still no map
     }
@@ -247,7 +247,7 @@ async function runGeneticAlgorithm(annotationData, popSize, generations, mutatio
     document.getElementById('ga-progress-bar').style.width = '0%';
     document.getElementById('current-generation').textContent = '0';
     document.getElementById('total-generations').textContent = generations;
-    document.getElementById('best-fitness').textContent = '计算中...';
+    document.getElementById('best-fitness').textContent = 'Calculating...';
     
     // Reset or destroy previous chart instance to start fresh
     if(fitnessChartInstance) {
@@ -268,10 +268,10 @@ async function runGeneticAlgorithm(annotationData, popSize, generations, mutatio
         gaLayers = []; // Clear our record of drawn GA layers
 
         if (annotationData.startPoint) {
-             L.marker([annotationData.startPoint.lat, annotationData.startPoint.lng], {icon: L.icon({iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png', iconSize: [25,41], iconAnchor: [12,41]}) }).bindPopup("起点").addTo(gaMap);
+             L.marker([annotationData.startPoint.lat, annotationData.startPoint.lng], {icon: L.icon({iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png', iconSize: [25,41], iconAnchor: [12,41]}) }).bindPopup("Start Point").addTo(gaMap);
         }
         if (annotationData.endPoint) {
-             L.marker([annotationData.endPoint.lat, annotationData.endPoint.lng], {icon: L.icon({iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png', iconSize: [25,41], iconAnchor: [12,41]}) }).bindPopup("终点").addTo(gaMap);
+             L.marker([annotationData.endPoint.lat, annotationData.endPoint.lng], {icon: L.icon({iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png', iconSize: [25,41], iconAnchor: [12,41]}) }).bindPopup("End Point").addTo(gaMap);
         }
 
         annotationData.constraints.forEach(c => {
@@ -361,8 +361,8 @@ async function runGeneticAlgorithm(annotationData, popSize, generations, mutatio
     visualizePopulation(population.map(ind => ({individual: ind, fitness: calculateFitness(ind, annotationData.constraints)})).sort((a,b) => b.fitness - a.fitness), bestRouteOverall.route); // Final visualization with sorted pop
 
     gaRunning = false;
-    document.getElementById('ga-progress-bar').textContent = `完成!`;
-    alert("遗传算法优化完成！最佳路线已在优化地图和3D视图中高亮。");
+    document.getElementById('ga-progress-bar').textContent = `Completed!`;
+    alert("Genetic algorithm optimization complete! The best route is highlighted on the optimization map and in the 3D view.");
     console.log("Best route found:", bestRouteOverall);
     
     // Automatically switch to 3D view and display

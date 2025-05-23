@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // init3DMap(); // Defer Cesium map initialization
     } catch (error) {
         console.error("Error initializing maps on load:", error);
-        alert("地图初始化失败，请检查浏览器控制台获取更多信息。");
+        alert("Map initialization failed, please check the browser console for more information.");
     } finally {
         if (loader) {
             loader.style.opacity = '0';
@@ -69,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('run-ga').addEventListener('click', async () => {
         const annotationData = getAnnotationData();
         if (!annotationData) {
-            alert("请先在“智能标注”标签页完成标注并设置起终点。");
+            alert("Please complete the annotation and set the start/end points on the 'Smart Annotation' tab first.");
             return;
         }
 
@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await new Promise(resolve => setTimeout(resolve, 100));
 
             if(!gaMapInitialized) { // Still not initialized, something is wrong
-                alert("优化地图未能初始化，请先切换到“算法优化”标签页。");
+                alert("Optimization map failed to initialize. Please switch to the 'Algorithm Optimization' tab first.");
                 return;
             }
         }
@@ -94,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const mutationRate = parseFloat(document.getElementById('mutation-rate').value);
 
         if (isNaN(popSize) || isNaN(generations) || isNaN(mutationRate) || popSize <=0 || generations <=0 || mutationRate <0) {
-            alert("请输入有效的遗传算法参数！");
+            alert("Please enter valid genetic algorithm parameters!");
             return;
         }
 

@@ -52,6 +52,9 @@ function displayRouteIn3D(routePoints, constraints) {
         init3DMap(); // Try to initialize if not already
         if (!cesiumViewer) return;
     }
+    else{
+        console.log("Hello")
+    }
 
     cesiumViewer.entities.removeAll(); // Clear previous entities
 
@@ -60,38 +63,75 @@ function displayRouteIn3D(routePoints, constraints) {
         const geojson = constraint.geojson;
         const colorStr = document.querySelector(`#annotation-type option[value="${constraint.type}"]`).dataset.color || '#888888';
         const cesiumColor = Cesium.Color.fromCssColorString(colorStr).withAlpha(0.4);
+        const readableConstraintType = constraint.readableType || constraint.type; // Fallback to type if readableType is not there
 
         if (geojson.geometry.type === "Polygon") {
             const hierarchy = geojson.geometry.coordinates[0].map(coord => Cesium.Cartesian3.fromDegrees(coord[0], coord[1]));
             cesiumViewer.entities.add({
-                name: constraint.type,
+                name: readableConstraintType,
                 polygon: {
                     hierarchy: new Cesium.PolygonHierarchy(hierarchy),
                     material: cesiumColor,
                     outline: true,
+                    outlineColor: Cesium.Color.BLACK
+                },
+                label: {
+                    text: readableConstraintType,
+                    font: '12pt sans-serif',
+                    fillColor: Cesium.Color.WHITE,
                     outlineColor: Cesium.Color.BLACK,
-                    // extrudeHeight: constraint.weight > 0 ? constraint.weight * 10 : 0, // Optional: extrude based on weight
-                    // height: 0 // on the ground
+                    outlineWidth: 2,
+                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                    pixelOffset: new Cesium.Cartesian2(0, -9), // Adjust as needed
+                    showBackground: true,
+                    backgroundColor: new Cesium.Color(0.165, 0.165, 0.165, 0.8)
                 }
             });
         } else if (geojson.geometry.type === "LineString") {
             const positions = geojson.geometry.coordinates.map(coord => Cesium.Cartesian3.fromDegrees(coord[0], coord[1]));
              cesiumViewer.entities.add({
-                name: constraint.type,
+                name: readableConstraintType,
                 polyline: {
                     positions: positions,
                     width: 5,
                     material: cesiumColor
+                },
+                label: {
+                    text: readableConstraintType,
+                    font: '12pt sans-serif',
+                    fillColor: Cesium.Color.WHITE,
+                    outlineColor: Cesium.Color.BLACK,
+                    outlineWidth: 2,
+                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                    // For polylines, position the label at the first point or center
+                    position: positions[0],
+                    pixelOffset: new Cesium.Cartesian2(0, -9),
+                    showBackground: true,
+                    backgroundColor: new Cesium.Color(0.165, 0.165, 0.165, 0.8)
                 }
             });
         } else if (geojson.geometry.type === "Point") {
             const position = Cesium.Cartesian3.fromDegrees(geojson.geometry.coordinates[0], geojson.geometry.coordinates[1]);
              cesiumViewer.entities.add({
-                name: constraint.type,
+                name: readableConstraintType,
                 position: position,
                 point: {
                     pixelSize: 10,
                     color: cesiumColor
+                },
+                label: {
+                    text: readableConstraintType,
+                    font: '12pt sans-serif',
+                    fillColor: Cesium.Color.WHITE,
+                    outlineColor: Cesium.Color.BLACK,
+                    outlineWidth: 2,
+                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                    pixelOffset: new Cesium.Cartesian2(0, -15), // Adjust for point marker
+                    showBackground: true,
+                    backgroundColor: new Cesium.Color(0.165, 0.165, 0.165, 0.8)
                 }
             });
         }

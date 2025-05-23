@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HSR Project - AI驱动的多维约束选线平台</title>
+    <title>HSR Project - AI-Powered Multi-Constraint Route Selection Platform</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
@@ -19,78 +19,79 @@
 </head>
 <body>
     <div id="app-loader">
-        <div class="loader-text">HSR Project 加载中...</div>
+        <div class="loader-text">HSR Project Loading...</div>
         <div class="spinner"></div>
     </div>
 
     <header>
         <h1>HSR Project</h1>
-        <p>AI驱动的多维约束选线平台</p>
+        <p>AI-Powered Multi-Constraint Route Selection Platform</p>
     </header>
 
     <nav id="tabs">
-        <button class="tab-button active" data-tab="annotation">1. 智能标注</button>
-        <button class="tab-button" data-tab="optimization">2. 算法优化</button>
-        <button class="tab-button" data-tab="visualization3d">3. 3D展示</button>
+        <button class="tab-button active" data-tab="annotation">1. Smart Annotation</button>
+        <button class="tab-button" data-tab="optimization">2. Algorithm Optimization</button>
+        <button class="tab-button" data-tab="visualization3d">3. 3D Visualization</button>
     </nav>
 
     <main>
         <section id="annotation" class="tab-content active">
-            <h2>步骤一：定义约束与起终点</h2>
+            <h2>Step 1: Define Constraints and Start/End Points</h2>
             <div class="controls-annotation">
                 <div class="control-group">
-                    <label for="annotation-type">选择标注类型：</label>
+                    <label for="annotation-type">Select Annotation Type:</label>
                     <select id="annotation-type">
-                        <option value="urban_attractor" data-weight="-100" data-color="#4CAF50">城市区域 (吸引)</option>
-                        <option value="difficult_terrain_repulsor" data-weight="200" data-color="#FF9800">复杂地形 (避让)</option>
-                        <option value="protected_zone_repulsor" data-weight="1000" data-color="#f44336">生态保护区 (强避让)</option>
-                        <option value="water_body_repulsor" data-weight="150" data-color="#2196F3">水体 (避让)</option>
-                        <option value="industrial_hub_attractor" data-weight="-50" data-color="#795548">工业枢纽 (吸引)</option>
+                        <option value="urban_attractor" data-weight="-100" data-color="#4CAF50">Urban Area (Attractor)</option>
+                        <option value="difficult_terrain_repulsor" data-weight="200" data-color="#FF9800">Difficult Terrain (Repulsor)</option>
+                        <option value="protected_zone_repulsor" data-weight="1000" data-color="#f44336">Ecological Protection Zone (Strong Repulsor)</option>
+                        <option value="water_body_repulsor" data-weight="150" data-color="#2196F3">Water Body (Repulsor)</option>
+                        <option value="industrial_hub_attractor" data-weight="-50" data-color="#795548">Industrial Hub (Attractor)</option>
                     </select>
                 </div>
                 <div class="control-group">
-                    <button id="set-start-point">设置起点</button>
-                    <button id="set-end-point">设置终点</button>
-                    <span id="start-point-coords">起点: 未设置</span>
-                    <span id="end-point-coords">终点: 未设置</span>
+                    <button id="set-start-point">Set Start Point</button>
+                    <button id="set-end-point">Set End Point</button>
+                    <button id="random-annotate" style="margin-left: 10px;">Random Annotate</button>
+                    <span id="start-point-coords">Start: Not Set</span>
+                    <span id="end-point-coords">End: Not Set</span>
                 </div>
                  <p class="instructions">
-                    使用左侧地图工具栏绘制点、线、面作为约束区域。绘制完成后，将自动应用上方选定的类型及其权重。<br>
-                    点击 "设置起点" 或 "设置终点" 按钮后，在地图上单击以选择相应的位置。
+                    Use the map toolbar on the left to draw points, lines, and polygons as constraint areas. After drawing, the selected type and its weight above will be automatically applied.<br>
+                    Click the "Set Start Point" or "Set End Point" button, then click on the map to select the respective location.
                 </p>
             </div>
             <div id="map-annotation" class="map-container"></div>
         </section>
 
         <section id="optimization" class="tab-content">
-            <h2>步骤二：遗传算法优化路线</h2>
+            <h2>Step 2: Genetic Algorithm Route Optimization</h2>
             <div class="controls-optimization">
-                <button id="run-ga">开始优化</button>
+                <button id="run-ga">Start Optimization</button>
                 <div class="ga-params">
-                    <label for="population-size">种群数量:</label>
-                    <input type="number" id="population-size" value="50" min="10" max="200" title="优化算法的种群大小">
-                    <label for="generations">迭代次数:</label>
-                    <input type="number" id="generations" value="100" min="10" max="500" title="算法进化的代数">
-                    <label for="mutation-rate">变异率:</label>
-                    <input type="number" id="mutation-rate" value="0.1" min="0.01" max="1" step="0.01" title="基因变异的概率 (0.01 - 1.0)">
+                    <label for="population-size">Population Size:</label>
+                    <input type="number" id="population-size" value="50" min="10" max="200" title="Population size for the optimization algorithm">
+                    <label for="generations">Generations:</label>
+                    <input type="number" id="generations" value="100" min="10" max="500" title="Number of generations for algorithm evolution">
+                    <label for="mutation-rate">Mutation Rate:</label>
+                    <input type="number" id="mutation-rate" value="0.1" min="0.01" max="1" step="0.01" title="Probability of gene mutation (0.01 - 1.0)">
                 </div>
             </div>
             <div id="ga-progress">
-                <p>当前迭代: <span id="current-generation">0</span>/<span id="total-generations">0</span></p>
-                <p>最佳适应度: <span id="best-fitness">N/A</span> (数值越大越优)</p>
+                <p>Current Iteration: <span id="current-generation">0</span>/<span id="total-generations">0</span></p>
+                <p>Best Fitness: <span id="best-fitness">N/A</span> (Higher value is better)</p>
                 <div class="progress-bar-container">
                     <div id="ga-progress-bar"></div>
                 </div>
             </div>
-            <div id="map-optimization" class="map-container-small" title="遗传算法优化过程可视化区域"></div>
-            <div id="fitness-chart-container" title="适应度进化曲线图">
+            <div id="map-optimization" class="map-container-small" title="Genetic algorithm optimization process visualization area"></div>
+            <div id="fitness-chart-container" title="Fitness evolution curve chart">
                 <canvas id="fitness-chart"></canvas>
             </div>
         </section>
 
         <section id="visualization3d" class="tab-content">
-            <h2>步骤三：最终路线3D展示</h2>
-            <p class="instructions">在此三维场景中查看优化后的最佳高铁线路及其与约束区域的关系。您可以使用鼠标进行缩放、平移和旋转视角。</p>
+            <h2>Step 3: Final Route 3D Visualization</h2>
+            <p class="instructions">View the optimized best high-speed rail line and its relationship with constraint areas in this 3D scene. You can use the mouse to zoom, pan, and rotate the view.</p>
             <div id="cesiumContainer" class="map-container"></div>
         </section>
     </main>
