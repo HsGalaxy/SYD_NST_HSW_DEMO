@@ -2,7 +2,7 @@ let annotationMap, drawControl, drawnItems, startMarker, endMarker;
 const annotations = []; // Store {layer: L.Layer, type: string, weight: number, color: string}
 
 function initAnnotationMap() {
-    annotationMap = L.map('map-annotation').setView([30.5, 114.3], 5); // Centered on China
+    annotationMap = L.map('map-annotation').setView([-25.27, 133.77], 4); // Centered on Australia
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(annotationMap);
@@ -42,6 +42,306 @@ function initAnnotationMap() {
     document.getElementById('set-start-point').addEventListener('click', () => setPointMode('start'));
     document.getElementById('set-end-point').addEventListener('click', () => setPointMode('end'));
     document.getElementById('random-annotate').addEventListener('click', randomlyAnnotate);
+
+    // Pre-load Australia and Ocean data
+    loadPredefinedAreas();
+}
+
+async function loadPredefinedAreas() {
+    const typeSelect = document.getElementById('annotation-type');
+    const oceanOption = Array.from(typeSelect.options).find(opt => opt.value === 'ocean_absolute_repulsor');
+
+    if (!oceanOption) {
+        console.error("Ocean annotation type not found in dropdown.");
+        return;
+    }
+
+    const oceanWeight = parseFloat(oceanOption.dataset.weight);
+    const oceanColor = oceanOption.dataset.color;
+    const oceanReadableType = oceanOption.textContent.split('(')[0].trim();
+    let fetchedData = null; // Declare fetchedData here to make it accessible later
+
+    // --- Fallback simplified coordinates ---
+    const australiaMainlandSimpleFallback = [
+        [-12.46, 130.84], [-10.68, 142.56], [-17.96, 146.03], [-28.99, 153.55],
+        [-37.81, 144.96], [-34.92, 138.60], [-31.95, 115.86], [-20.34, 118.52],
+        [-12.46, 130.84]
+    ];
+    const tasmaniaSimpleFallback = [
+        [-40.5, 144.5], [-40.5, 148.5], [-43.5, 148.5], [-43.5, 144.5], [-40.5, 144.5]
+    ];
+    let australianCoastlineCoords = [australiaMainlandSimpleFallback, tasmaniaSimpleFallback]; // Default to fallback for holes
+    let visualLandStyle = { color: '#FFD700', fillColor: '#FFD700', weight: 1, fillOpacity: 0.3 }; // Default to fallback style
+
+    // --- Attempt to fetch high-resolution coastline ---
+    const coastlineUrl = 'static/aus-coast.json'; // Use the new filtered NSW file
+
+    try {
+        if (coastlineUrl) {
+            console.log(`Fetching coastline from: ${coastlineUrl}`);
+            fetchedData = await fetchAndProcessCoastline(coastlineUrl);
+
+            if (fetchedData && fetchedData.type === 'polygon' && fetchedData.data.length > 0) {
+                australianCoastlineCoords = fetchedData.data; // Use these Polygon/MultiPolygon rings for ocean holes
+                visualLandStyle = { color: '#228B22', fillColor: '#32CD32', weight: 1, fillOpacity: 0.4 }; // Green for high-fidelity land
+                console.log("Using fetched Polygon/MultiPolygon data for landmass holes and filled visual layer.");
+
+                // If the GeoJSON also contained line data (e.g. rivers, roads along with land polygons),
+                // and fetchAndProcessCoastline was modified to return them separately, draw them.
+                if (fetchedData.visualLines && fetchedData.visualLines.length > 0) {
+                    const additionalLineLayer = L.polyline(fetchedData.visualLines, { color: '#556B2F', weight: 1, dashArray: '5, 5' });
+                    additionalLineLayer.bindTooltip("Additional Lines from GeoJSON", { permanent: false, direction: 'top' });
+                    drawnItems.addLayer(additionalLineLayer);
+                    console.log("Additionally drew visual lines found in GeoJSON.");
+                }
+
+            } else if (fetchedData && fetchedData.type === 'linestring' && fetchedData.data.length > 0) {
+                // Convert LineString data to polygon approximation for better ocean/land separation
+                console.log("Converting LineString data to polygon approximation for ocean holes...");
+                
+                try {
+                    const convertedPolygons = convertLineStringsToPolygons(fetchedData.data);
+                    if (convertedPolygons.length > 0) {
+                        australianCoastlineCoords = convertedPolygons;
+                        visualLandStyle = { color: '#228B22', fillColor: '#32CD32', weight: 1, fillOpacity: 0.4 }; // Green for converted polygons
+                        console.log(`Successfully converted ${convertedPolygons.length} LineString segments to polygon approximations.`);
+                    } else {
+                        console.warn("Failed to convert LineStrings to polygons, using fallback.");
+                    }
+                } catch (conversionError) {
+                    console.error("Error converting LineStrings to polygons:", conversionError);
+                }
+
+                // Display the original LineString data as visual coastline
+                const fetchedLineLayer = L.polyline(fetchedData.data, { color: '#006400', weight: 2 }); // Dark green for detailed lines
+                fetchedLineLayer.bindTooltip("Coastline (Fetched Lines - Visual Only)", { permanent: false, direction: 'top' });
+                drawnItems.addLayer(fetchedLineLayer);
+                console.log("Displaying fetched LineString data as visual coastline.");
+                
+            } else {
+                console.warn("Fetched coastline data was null, empty, or not of expected type (Polygon/MultiPolygon/LineString). Using full fallback.");
+                // australianCoastlineCoords and visualLandStyle remain their default fallback values.
+            }
+        } else {
+            console.warn("Coastline URL not provided or is placeholder, using fallback simplified data.");
+        }
+    } catch (error) {
+        console.error("Error fetching or processing coastline data, using fallback:", error);
+    }
+
+    // Add the primary filled land visual layer.
+    // This will be green if from fetched polygons, or yellow if from fallback.
+    // If only linestrings were fetched, this 'australiaVisualFilledLayer' will be the yellow fallback.
+    const australiaVisualFilledLayer = L.polygon(australianCoastlineCoords, visualLandStyle);
+    let mainLandTooltip = "Australia (Landmass - Fallback)";
+    if (fetchedData && fetchedData.type === 'polygon' && fetchedData.data.length > 0) {
+        mainLandTooltip = "Australia (Landmass - Processed GeoJSON Polygons)";
+    } else if (fetchedData && fetchedData.type === 'linestring' && fetchedData.data.length > 0) {
+        // If we converted linestrings to polygons, update the tooltip
+        mainLandTooltip = "Australia (Landmass - Converted from LineStrings)";
+    }
+    australiaVisualFilledLayer.bindTooltip(mainLandTooltip, { permanent: false, direction: 'top' });
+    drawnItems.addLayer(australiaVisualFilledLayer);
+    console.log(`Main filled land layer added. Tooltip: ${mainLandTooltip}`);
+
+
+    const worldOuterRing = [
+        [-85, -180], [85, -180], [85, 180], [-85, 180], [-85, -180]
+    ];
+
+    // australianCoastlineCoords for holes is now correctly set to high-fidelity polygon data if available,
+    // or fallback simple polygons otherwise (this includes the case where only linestrings were fetched).
+    const oceanPolygonHoles = australianCoastlineCoords.map(polygonRing => {
+        return polygonRing;
+    });
+
+    const oceanLayerDefinition = [worldOuterRing, ...oceanPolygonHoles];
+
+    const oceanLayer = L.polygon(oceanLayerDefinition, {
+        color: oceanColor, fillColor: oceanColor, weight: 1,
+        fillOpacity: 0.3, fillRule: 'evenodd'
+    });
+
+    const oceanGeoJSON = oceanLayer.toGeoJSON();
+    oceanLayer.bindTooltip(oceanReadableType, { permanent: false, direction: 'top' });
+    drawnItems.addLayer(oceanLayer);
+    annotations.push({
+        layer: oceanLayer, type: 'ocean_absolute_repulsor',
+        weight: oceanWeight, geojson: oceanGeoJSON, readableType: oceanReadableType
+    });
+
+    console.log("Predefined Ocean area (with Australia as a hole) loaded as absolute repulsor.");
+    // Determine bounds for fitting view
+    let layerToFit = null;
+    if (fetchedData && (fetchedData.type === 'polygon' || fetchedData.type === 'linestring') && australiaVisualFilledLayer) {
+        layerToFit = australiaVisualFilledLayer;
+    } else if (fetchedData && fetchedData.type === 'linestring' && fetchedData.data.length > 0) {
+        const lineLayerForBounds = drawnItems.getLayers().find(l => l.getTooltip && l.getTooltip().getContent() === "Coastline (Fetched Lines - Visual Only)");
+        if (lineLayerForBounds) layerToFit = lineLayerForBounds;
+    } else if (australiaVisualFilledLayer) { // Fallback to the simple filled layer if it was drawn
+        layerToFit = australiaVisualFilledLayer;
+    }
+    
+    if (layerToFit && layerToFit.getBounds().isValid()) {
+        annotationMap.fitBounds(layerToFit.getBounds().pad(0.2));
+    } else {
+        annotationMap.setView([-25.27, 133.77], 4); // Default fallback view
+    }
+}
+
+async function fetchAndProcessCoastline(url) {
+    try {
+        console.log(`[Progress] Starting fetch for: ${url}`);
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const contentLength = response.headers.get('content-length');
+        const totalSize = contentLength ? parseInt(contentLength, 10) : null;
+        let loadedSize = 0;
+        let chunks = [];
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+
+        console.log(`[Progress] Fetch complete. Starting to read ${totalSize ? (totalSize / (1024*1024)).toFixed(2) + 'MB' : 'unknown size'} of data...`);
+
+        while (true) {
+            try {
+                const { done, value } = await reader.read();
+                if (done) {
+                    break;
+                }
+                chunks.push(value);
+                loadedSize += value.length;
+                if (totalSize) {
+                    console.log(`[Progress] Downloaded ${(loadedSize / (1024*1024)).toFixed(2)}MB / ${(totalSize / (1024*1024)).toFixed(2)}MB (${Math.round((loadedSize/totalSize)*100)}%)`);
+                } else {
+                    console.log(`[Progress] Downloaded ${(loadedSize / (1024*1024)).toFixed(2)}MB`);
+                }
+                 // Yield to browser occasionally during download of very large files
+                if (loadedSize % (5 * 1024 * 1024) < value.length ) { // Yield approx every 5MB
+                    await new Promise(resolve => setTimeout(resolve, 0));
+                }
+            } catch (streamError) {
+                console.error("[Error] Error reading stream:", streamError);
+                throw streamError; // Re-throw to be caught by the outer try-catch
+            }
+        }
+        
+        console.log("[Progress] Download complete. Concatenating chunks...");
+        // Concatenate chunks into a single Uint8Array
+        let fullResponseArray = new Uint8Array(loadedSize);
+        let position = 0;
+        for (const chunk of chunks) {
+            fullResponseArray.set(chunk, position);
+            position += chunk.length;
+        }
+        chunks = null; // Free memory
+
+        console.log("[Progress] Decoding text...");
+        const responseText = decoder.decode(fullResponseArray);
+        fullResponseArray = null; // Free memory
+
+        let geojsonData;
+        try {
+            console.log("[Progress] Parsing JSON (this may still take a while for very large JSON)...");
+            geojsonData = JSON.parse(responseText);
+            console.log(`[Progress] JSON parsed successfully. GeoJSON Type: ${geojsonData.type}. Starting coordinate processing...`);
+        } catch (e) {
+            console.error("[Error] Failed to parse JSON string:", e);
+            console.warn("[Info] The GeoJSON file might be malformed, or too large for the JS engine to parse even after download. Consider simplifying it.");
+            throw e; // Re-throw to be caught by the outer try-catch and trigger fallback
+        }
+        // responseText is now free to be garbage collected if no other references exist
+
+        let landmassDefiningCoords = [];
+        let visualLineCoords = [];
+        let hasPolygonData = false;
+        let featuresProcessed = 0;
+        const totalFeatures = geojsonData.features ? geojsonData.features.length : 1; // For progress reporting
+        const reportInterval = Math.max(100, Math.floor(totalFeatures / 10)); // Report every 100 features or 10%
+
+        const swapCoordsRing = (ring) => {
+            if (!Array.isArray(ring)) { console.warn("Invalid ring (not an array):", ring); return []; }
+            return ring.map(coord => {
+                if (!Array.isArray(coord) || coord.length < 2) { console.warn("Invalid coord in ring:", coord); return [0,0];}
+                return [coord[1], coord[0]];
+            });
+        };
+
+        const processGeometry = async (geometry) => { // Made async to allow yielding
+            if (!geometry || !geometry.coordinates) {
+                console.warn("Skipping geometry: no coordinates property.", geometry);
+                return;
+            }
+            // console.log(`Processing geometry type: ${geometry.type}`); // Can be too verbose
+
+            if (geometry.type === 'Polygon') {
+                if (Array.isArray(geometry.coordinates) && geometry.coordinates.length > 0) {
+                    landmassDefiningCoords.push(swapCoordsRing(geometry.coordinates[0]));
+                    hasPolygonData = true;
+                } else { /* console.warn("Polygon geometry has invalid coordinates structure:", geometry.coordinates); */ }
+            } else if (geometry.type === 'MultiPolygon') {
+                if (Array.isArray(geometry.coordinates)) {
+                    for (const polygonCoordinateArray of geometry.coordinates) {
+                        if (Array.isArray(polygonCoordinateArray) && polygonCoordinateArray.length > 0) {
+                            landmassDefiningCoords.push(swapCoordsRing(polygonCoordinateArray[0]));
+                            hasPolygonData = true;
+                        } else { /* console.warn("MultiPolygon part has invalid coordinates structure:", polygonCoordinateArray); */ }
+                    }
+                } else { /* console.warn("MultiPolygon geometry has invalid coordinates structure:", geometry.coordinates); */ }
+            } else if (geometry.type === 'LineString') {
+                if (Array.isArray(geometry.coordinates) && geometry.coordinates.length > 1) {
+                    visualLineCoords.push(swapCoordsRing(geometry.coordinates));
+                } else { /* console.warn("LineString geometry has invalid coordinates structure:", geometry.coordinates); */ }
+            } else if (geometry.type === 'MultiLineString') {
+                if (Array.isArray(geometry.coordinates)) {
+                    for (const lineCoordinateArray of geometry.coordinates) {
+                        if (Array.isArray(lineCoordinateArray) && lineCoordinateArray.length > 1) {
+                            visualLineCoords.push(swapCoordsRing(lineCoordinateArray));
+                        } else { /* console.warn("MultiLineString part has invalid coordinates structure:", lineCoordinateArray); */ }
+                    }
+                } else { /* console.warn("MultiLineString geometry has invalid coordinates structure:", geometry.coordinates); */ }
+            }
+            // else { console.log(`Skipping unsupported geometry type: ${geometry.type}`); }
+        };
+
+        if (geojsonData.type === 'FeatureCollection') {
+            if (geojsonData.features && Array.isArray(geojsonData.features)) {
+                console.log(`[Progress] Processing ${totalFeatures} features...`);
+                for (const feature of geojsonData.features) {
+                    if (feature && feature.geometry) {
+                        await processGeometry(feature.geometry); // Await if processGeometry becomes async for yielding
+                    }
+                    featuresProcessed++;
+                    if (featuresProcessed % reportInterval === 0) {
+                        console.log(`[Progress] Processed ${featuresProcessed}/${totalFeatures} features...`);
+                        await new Promise(resolve => setTimeout(resolve, 0)); // Yield to browser
+                    }
+                }
+            } else { console.warn("FeatureCollection has no 'features' array or it's invalid."); }
+        } else {
+            console.log(`[Progress] Processing single geometry feature...`);
+            await processGeometry(geojsonData); // Await if processGeometry becomes async for yielding
+        }
+        console.log(`[Progress] Coordinate processing complete.`);
+
+        if (hasPolygonData && landmassDefiningCoords.length > 0) {
+            console.log(`Extracted ${landmassDefiningCoords.length} Polygon/MultiPolygon rings for defining landmass holes.`);
+            return { type: 'polygon', data: landmassDefiningCoords, visualLines: visualLineCoords.length > 0 ? visualLineCoords : null };
+        } else if (visualLineCoords.length > 0) {
+            console.log(`Extracted ${visualLineCoords.length} LineString/MultiLineString segments for visual coastline. Ocean repulsor will use fallback for holes.`);
+            return { type: 'linestring', data: visualLineCoords };
+        } else {
+            console.warn("No usable Polygon, MultiPolygon, LineString, or MultiLineString data found in GeoJSON after processing.");
+            return null;
+        }
+
+    } catch (error) {
+        console.error('Failed to fetch or process coastline data:', error);
+        return null;
+    }
 }
 
 function randomlyAnnotate() {
@@ -177,7 +477,8 @@ function getAnnotationData() {
         constraints: annotations.map(a => ({ // We'll pass GeoJSON for GA and 3D
             type: a.type,
             weight: a.weight,
-            geojson: a.layer.toGeoJSON() // Ensure layer.toGeoJSON() is available or convert manually
+            geojson: a.layer.toGeoJSON(), // Ensure layer.toGeoJSON() is available or convert manually
+            readableType: a.readableType
         }))
     };
 }

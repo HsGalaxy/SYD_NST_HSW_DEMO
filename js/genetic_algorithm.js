@@ -44,24 +44,24 @@ function createIndividual(startPoint, endPoint) {
 
 function calculateFitness(route, constraints) {
     let totalLength = 0;
-    let penalty = 0;
+    let constraintScore = 0; // Renamed from penalty for clarity
 
     for (let i = 0; i < route.length - 1; i++) {
         totalLength += getDistance(route[i], route[i+1]);
         constraints.forEach(constraint => {
-            const constraintLayer = L.geoJSON(constraint.geojson); 
+            const constraintLayer = L.geoJSON(constraint.geojson);
             if (constraintLayer.getBounds && routeSegmentIntersectsBounds(route[i], route[i+1], constraintLayer.getBounds())) {
-                // Check if the *midpoint* of the segment is inside the polygon for a slightly better check
-                // A more robust solution would use a proper line-polygon intersection library (e.g., Turf.js)
+                // Check if the *midpoint* of the segment is inside the polygon
                 const midLat = (route[i].lat + route[i+1].lat) / 2;
                 const midLng = (route[i].lng + route[i+1].lng) / 2;
                 if (isPointInPolygon({lat: midLat, lng: midLng}, constraintLayer.getLayers()[0].getLatLngs()[0])) { // Assumes simple polygon
-                    penalty += Math.abs(constraint.weight) * (constraint.weight > 0 ? 1 : -0.5) ; 
+                    constraintScore += constraint.weight; // Directly use the weight. Positive for penalty, negative for reward.
                 }
             }
         });
     }
-    return 1 / (totalLength + penalty * 10 + 0.0001); 
+    // Increased multiplier for constraintScore from 10 to 50 to give constraints more impact
+    return 1 / (totalLength + constraintScore * 50 + 0.0001);
 }
 
 function routeSegmentIntersectsBounds(p1, p2, bounds) {
