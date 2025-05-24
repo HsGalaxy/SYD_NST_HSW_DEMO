@@ -49,6 +49,19 @@ function initAnnotationMap() {
     document.getElementById('load-annotations').addEventListener('click', loadAnnotations);
 }
 
+function getColorForAnnotationType(annotationType) {
+    const typeSelect = document.getElementById('annotation-type');
+    if (typeSelect) {
+        const option = typeSelect.querySelector(`option[value="${annotationType}"]`);
+        if (option && option.dataset.color) {
+            return option.dataset.color;
+        }
+    }
+    // Fallback color if type not found or no color defined
+    console.warn(`No color defined for annotation type: ${annotationType}. Using default.`);
+    return '#808080'; // Default grey
+}
+
 async function loadPredefinedAreas() {
     const typeSelect = document.getElementById('annotation-type');
     const oceanOption = Array.from(typeSelect.options).find(opt => opt.value === 'ocean_absolute_repulsor');
@@ -558,16 +571,22 @@ function loadAnnotations() {
                 // Load constraints
                 if (data.constraints) {
                     data.constraints.forEach(constraint => {
+                        const styleColor = getColorForAnnotationType(constraint.type);
                         const layer = L.geoJSON(constraint.geojson, {
                             style: {
-                                color: constraint.color,
-                                fillColor: constraint.color,
+                                color: styleColor,
+                                fillColor: styleColor,
                                 weight: 2,
                                 fillOpacity: 0.4
                             }
                         }).getLayers()[0];
                         
-                        layer.bindTooltip(constraint.readableType, { permanent: false, direction: 'top' });
+                        // Ensure layer is valid before binding tooltip
+                        if (!layer) {
+                            console.error("Failed to create layer from GeoJSON constraint:", constraint);
+                            return; // Skip this constraint
+                        }
+                        layer.bindTooltip(constraint.readableType || constraint.type, { permanent: false, direction: 'top' });
                         drawnItems.addLayer(layer);
                         annotations.push({
                             layer: layer,
