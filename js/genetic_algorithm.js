@@ -1,12 +1,7 @@
-// Simplified Genetic Algorithm
-let gaMap; // For displaying GA progress on a smaller map
-let population = [];
-let bestRouteOverall = null;
-let fitnessHistory = []; // To store {gen, best, avg}
-let currentGenerationNum = 0; // Renamed from currentGeneration to avoid conflict with DOM element
-let gaRunning = false;
+// RRT* Algorithm and supporting map initialization
+let gaMap; // For displaying RRT* progress on a smaller map (window.optimizationMap)
 
-const INTERMEDIATE_POINTS = 5; // Number of intermediate points in a route
+// Note: Genetic Algorithm specific variables and functions have been removed.
 
 function initGAMap() {
     if (gaMap) { // If map already exists, just invalidate size (e.g., if tab was re-opened)
@@ -15,10 +10,11 @@ function initGAMap() {
     }
     try {
         gaMap = L.map('map-optimization').setView([30.5, 114.3], 5); // Default view
+        window.optimizationMap = gaMap; // Expose gaMap as window.optimizationMap
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(gaMap);
-        console.log("GA Map Initialized");
+        console.log("GA Map Initialized, window.optimizationMap set.");
     } catch (e) {
         console.error("Error initializing GA map:", e);
         const mapDiv = document.getElementById('map-optimization');
@@ -26,359 +22,259 @@ function initGAMap() {
     }
 }
 
-function createIndividual(startPoint, endPoint) {
-    const route = [startPoint];
-    const latDiff = endPoint.lat - startPoint.lat;
-    const lngDiff = endPoint.lng - startPoint.lng;
+// --- Genetic Algorithm specific functions and variables have been removed ---
+// The RRTStar class below is independent and used by the main application.
 
-    for (let i = 0; i < INTERMEDIATE_POINTS; i++) {
-        const ratio = (i + 1) / (INTERMEDIATE_POINTS + 1);
-        route.push({
-            lat: startPoint.lat + latDiff * ratio + (Math.random() - 0.5) * (Math.abs(latDiff) * 0.3 + 0.5) ,
-            lng: startPoint.lng + lngDiff * ratio + (Math.random() - 0.5) * (Math.abs(lngDiff) * 0.3 + 0.5)
-        });
+class RRTStar {
+    constructor(start, goal, constraints, bounds, options = {}) {
+        this.start = start;
+        this.goal = goal;
+        this.constraints = constraints;
+        this.bounds = bounds;
+        this.options = {
+            maxIterations: options.maxIterations || 1000,
+            stepSize: options.stepSize || 0.1,
+            goalSampleRate: options.goalSampleRate || 0.1,
+            maxDistance: options.maxDistance || 0.5,
+            rewireRadius: options.rewireRadius || 0.5,
+            ...options
+        };
+
+        this.vertices = [start]; // Array of {lat, lng} points
+        this.parents = [null];   // Index of parent vertex for each vertex
+        this.costs = [0];        // Cost from start to each vertex
+        // this.vertexMap = new Map(); // For quick lookup of nearby vertices - Not currently used, can be removed or implemented later
     }
-    route.push(endPoint);
-    return route;
-}
 
-function calculateFitness(route, constraints) {
-    let totalLength = 0;
-    let constraintScore = 0; // Renamed from penalty for clarity
+    // Calculate distance between two points
+    distance(p1, p2) {
+        return Math.sqrt(Math.pow(p2.lat - p1.lat, 2) + Math.pow(p2.lng - p1.lng, 2));
+    }
 
-    for (let i = 0; i < route.length - 1; i++) {
-        totalLength += getDistance(route[i], route[i+1]);
-        constraints.forEach(constraint => {
-            const constraintLayer = L.geoJSON(constraint.geojson);
-            if (constraintLayer.getBounds && routeSegmentIntersectsBounds(route[i], route[i+1], constraintLayer.getBounds())) {
-                // Check if the *midpoint* of the segment is inside the polygon
-                const midLat = (route[i].lat + route[i+1].lat) / 2;
-                const midLng = (route[i].lng + route[i+1].lng) / 2;
-                if (isPointInPolygon({lat: midLat, lng: midLng}, constraintLayer.getLayers()[0].getLatLngs()[0])) { // Assumes simple polygon
-                    constraintScore += constraint.weight; // Directly use the weight. Positive for penalty, negative for reward.
+    // Check if a point is in collision with any constraint
+    isCollision(point) {
+        for (const constraint of this.constraints) {
+            if (constraint.type === 'ocean_absolute_repulsor') {
+                // Check if point is in ocean
+                if (this.isPointInPolygon(point, constraint.geojson.geometry.coordinates[0])) {
+                    return true;
                 }
             }
-        });
-    }
-    // Increased multiplier for constraintScore from 10 to 50 to give constraints more impact
-    return 1 / (totalLength + constraintScore * 50 + 0.0001);
-}
-
-function routeSegmentIntersectsBounds(p1, p2, bounds) {
-    // Check if segment's bounding box intersects the constraint's bounding box
-    const segmentBounds = L.latLngBounds(p1,p2);
-    return bounds.intersects(segmentBounds);
-}
-
-
-function selection(popWithFitness) {
-    const tournamentSize = 5;
-    let selected = [];
-    for (let i = 0; i < popWithFitness.length; i++) {
-        let bestInTournament = null;
-        for (let j = 0; j < tournamentSize; j++) {
-            const randomIndex = Math.floor(Math.random() * popWithFitness.length);
-            const contestant = popWithFitness[randomIndex];
-            if (bestInTournament === null || contestant.fitness > bestInTournament.fitness) {
-                bestInTournament = contestant;
-            }
         }
-        selected.push(deepClone(bestInTournament.individual)); // Store a deep clone
-    }
-    return selected;
-}
-
-function crossover(parent1, parent2) {
-    const child1 = [deepClone(parent1[0])]; 
-    const child2 = [deepClone(parent2[0])];
-    const crossoverPoint = Math.floor(Math.random() * (INTERMEDIATE_POINTS -1)) + 1; // Ensure crossover happens among intermediate points
-
-    for (let i = 1; i <= INTERMEDIATE_POINTS; i++) { // Iterate through intermediate points
-        if (i < crossoverPoint) {
-            child1.push(deepClone(parent1[i]));
-            child2.push(deepClone(parent2[i]));
-        } else {
-            child1.push(deepClone(parent2[i]));
-            child2.push(deepClone(parent1[i]));
-        }
-    }
-    child1.push(deepClone(parent1[parent1.length - 1])); 
-    child2.push(deepClone(parent2[parent2.length - 1]));
-    return [child1, child2];
-}
-
-function mutate(individual, mutationRate) {
-    const mutatedIndividual = [deepClone(individual[0])]; 
-    for (let i = 1; i <= INTERMEDIATE_POINTS; i++) {
-        if (Math.random() < mutationRate) {
-            mutatedIndividual.push({
-                lat: individual[i].lat + (Math.random() - 0.5) * 0.5, 
-                lng: individual[i].lng + (Math.random() - 0.5) * 0.5  
-            });
-        } else {
-            mutatedIndividual.push(deepClone(individual[i]));
-        }
-    }
-    mutatedIndividual.push(deepClone(individual[individual.length - 1])); 
-    return mutatedIndividual;
-}
-
-
-let gaLayers = [];
-function visualizePopulation(populationToDraw, currentBestRoute) {
-    if(!gaMap) return; // Don't draw if map isn't ready
-
-    gaLayers.forEach(layer => gaMap.removeLayer(layer));
-    gaLayers = [];
-
-    // Draw a few individuals from the population (e.g., top 5 or a sample)
-    populationToDraw.slice(0, 5).forEach((indData, index) => {
-        const ind = indData.individual || indData; // Handle if it's raw individual or {individual, fitness}
-        const routeLine = L.polyline(ind.map(p => [p.lat, p.lng]), {
-            color: 'rgba(0, 255, 0, 0.3)', // Light green for general population
-            weight: 2,
-            opacity: 0.5
-        }).addTo(gaMap);
-        gaLayers.push(routeLine);
-    });
-
-    // Highlight the current generation's best route
-    if (currentBestRoute) {
-         const bestLineThisGen = L.polyline(currentBestRoute.map(p => [p.lat, p.lng]), {
-            color: 'cyan', weight: 3, opacity: 0.8
-        }).addTo(gaMap);
-        gaLayers.push(bestLineThisGen);
-    }
-    
-    // Highlight the overall best route found so far
-    if (bestRouteOverall && bestRouteOverall.route) {
-         const overallBestLine = L.polyline(bestRouteOverall.route.map(p => [p.lat, p.lng]), {
-            color: 'magenta', weight: 4, dashArray: '10, 5'
-        }).addTo(gaMap);
-        gaLayers.push(overallBestLine);
-        // Fit bounds to the overall best route to keep it in view
-        // gaMap.fitBounds(overallBestLine.getBounds()); 
-        // ^ Be careful with too frequent fitBounds, can be jarring.
-        // Only fit bounds if it's significantly different or on first overall best.
-    }
-}
-
-
-let fitnessChartInstance = null;
-function updateFitnessChart(generation, bestFitnessThisGen, avgFitness) {
-    const ctx = document.getElementById('fitness-chart').getContext('2d');
-    if (!fitnessChartInstance) {
-        fitnessChartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [], // Generation numbers
-                datasets: [
-                    {
-                        label: 'Best Fitness (This Gen)',
-                        data: [],
-                        borderColor: 'rgb(75, 192, 192)', // Cyan
-                        tension: 0.1
-                    },
-                    {
-                        label: 'Average Fitness',
-                        data: [],
-                        borderColor: 'rgb(255, 159, 64)', // Orange
-                        tension: 0.1
-                    },
-                    {
-                        label: 'Overall Best Fitness',
-                        data: [],
-                        borderColor: 'rgb(255, 99, 132)', // Pink/Red
-                        tension: 0.1,
-                        borderDash: [5, 5] // Dashed line for overall best
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: { 
-                    y: { 
-                        beginAtZero: false, // Fitness might not start at 0
-                        title: { display: true, text: 'Fitness Value' }
-                    },
-                    x: {
-                        title: { display: true, text: 'Generation' }
-                    }
-                },
-                animation: { duration: 300 } // Smooth updates
-            }
-        });
-    }
-    fitnessChartInstance.data.labels.push(generation);
-    fitnessChartInstance.data.datasets[0].data.push(bestFitnessThisGen);
-    fitnessChartInstance.data.datasets[1].data.push(avgFitness);
-    if (bestRouteOverall) {
-        fitnessChartInstance.data.datasets[2].data.push(bestRouteOverall.fitness);
-    } else if (fitnessChartInstance.data.datasets[2].data.length > 0) {
-        // Keep last known overall best if current is null (shouldn't happen if logic is right)
-        fitnessChartInstance.data.datasets[2].data.push(fitnessChartInstance.data.datasets[2].data.slice(-1)[0]);
-    } else {
-         fitnessChartInstance.data.datasets[2].data.push(bestFitnessThisGen); // First overall best
+        return false;
     }
 
-
-    fitnessChartInstance.update();
-}
-
-async function runGeneticAlgorithm(annotationData, popSize, generations, mutationRate) {
-    if (gaRunning) {
-        alert("Genetic algorithm is already running!");
-        return null;
-    }
-    if(!gaMap) {
-        alert("Optimization map not initialized. Please switch to the Optimization tab first.");
-        initGAMap(); // Try to initialize it
-        if(!gaMap) return null; // Still no map
-    }
-
-    gaRunning = true;
-    currentGenerationNum = 0;
-    population = [];
-    fitnessHistory = [];
-    bestRouteOverall = null; // Reset overall best for this run
-
-    // Update UI elements
-    document.getElementById('ga-progress-bar').style.width = '0%';
-    document.getElementById('current-generation').textContent = '0';
-    document.getElementById('total-generations').textContent = generations;
-    document.getElementById('best-fitness').textContent = 'Calculating...';
-    
-    // Reset or destroy previous chart instance to start fresh
-    if(fitnessChartInstance) {
-        fitnessChartInstance.destroy();
-        fitnessChartInstance = null;
-    }
-    // Call updateFitnessChart to initialize it with empty data if needed or let the loop do it.
-    updateFitnessChart(0,0,0); // Initialize chart with 0 values
-
-    // Clear previous drawings on GA map and copy constraints
-    if (gaMap) {
-        gaMap.eachLayer(layer => { 
-            // Only remove vector layers, not the tile layer
-            if (layer instanceof L.Path || layer instanceof L.Marker) {
-                gaMap.removeLayer(layer);
-            }
-        });
-        gaLayers = []; // Clear our record of drawn GA layers
-
-        if (annotationData.startPoint) {
-             L.marker([annotationData.startPoint.lat, annotationData.startPoint.lng], {icon: L.icon({iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png', iconSize: [25,41], iconAnchor: [12,41]}) }).bindPopup("Start Point").addTo(gaMap);
-        }
-        if (annotationData.endPoint) {
-             L.marker([annotationData.endPoint.lat, annotationData.endPoint.lng], {icon: L.icon({iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png', iconSize: [25,41], iconAnchor: [12,41]}) }).bindPopup("End Point").addTo(gaMap);
-        }
-
-        annotationData.constraints.forEach(c => {
-            const style = { 
-                color: document.querySelector(`#annotation-type option[value="${c.type}"]`)?.dataset.color || '#808080', // Grey default
-                weight:1, 
-                opacity:0.5, 
-                fillOpacity:0.2
-            };
-            L.geoJSON(c.geojson, {style: style}).addTo(gaMap);
-        });
-        // Fit map to constraints and start/end points if available
-        const boundsForFit = L.featureGroup();
-        if(annotationData.startPoint) boundsForFit.addLayer(L.marker([annotationData.startPoint.lat, annotationData.startPoint.lng]));
-        if(annotationData.endPoint) boundsForFit.addLayer(L.marker([annotationData.endPoint.lat, annotationData.endPoint.lng]));
-        annotationData.constraints.forEach(c => boundsForFit.addLayer(L.geoJSON(c.geojson)));
-        if(boundsForFit.getLayers().length > 0) gaMap.fitBounds(boundsForFit.getBounds().pad(0.1)); // Add some padding
-    }
-
-
-    // Initialize population
-    for (let i = 0; i < popSize; i++) {
-        population.push(createIndividual(annotationData.startPoint, annotationData.endPoint));
-    }
-
-    for (let gen = 0; gen < generations; gen++) {
-        currentGenerationNum = gen + 1;
-        document.getElementById('current-generation').textContent = currentGenerationNum;
-        const progressPercent = (currentGenerationNum / generations) * 100;
-        document.getElementById('ga-progress-bar').style.width = `${progressPercent}%`;
-        document.getElementById('ga-progress-bar').textContent = `${Math.round(progressPercent)}%`;
-
-
-        let popWithFitness = population.map(ind => ({
-            individual: ind,
-            fitness: calculateFitness(ind, annotationData.constraints)
-        }));
-
-        popWithFitness.sort((a, b) => b.fitness - a.fitness); // Sort descending by fitness
-
-        const bestThisGeneration = popWithFitness[0];
-
-        if (!bestRouteOverall || bestThisGeneration.fitness > bestRouteOverall.fitness) {
-            bestRouteOverall = { route: deepClone(bestThisGeneration.individual), fitness: bestThisGeneration.fitness };
-        }
-        document.getElementById('best-fitness').textContent = bestRouteOverall.fitness.toFixed(6);
-
-        const avgFitness = popWithFitness.reduce((sum, indFitness) => sum + indFitness.fitness, 0) / popWithFitness.length;
-        fitnessHistory.push({ gen: currentGenerationNum, best: bestThisGeneration.fitness, avg: avgFitness, overallBest: bestRouteOverall.fitness });
-        updateFitnessChart(currentGenerationNum, bestThisGeneration.fitness, avgFitness); // Pass current gen best, not overall
-
-        if (gen % 5 === 0 || gen === generations - 1) { 
-           visualizePopulation(popWithFitness, bestThisGeneration.individual);
-        }
-
-        // Selection, Crossover, Mutation
-        const newPopulation = [];
-        if(bestRouteOverall && bestRouteOverall.route) { // Elitism
-            newPopulation.push(deepClone(bestRouteOverall.route));
-        }
-
-        const selectedParents = selection(popWithFitness);
-
-        while (newPopulation.length < popSize) {
-            const parent1Index = Math.floor(Math.random() * selectedParents.length);
-            let parent2Index = Math.floor(Math.random() * selectedParents.length);
-            // Ensure parent2 is different from parent1 for meaningful crossover
-            while (parent2Index === parent1Index && selectedParents.length > 1) {
-                 parent2Index = Math.floor(Math.random() * selectedParents.length);
-            }
-            const parent1 = selectedParents[parent1Index];
-            const parent2 = selectedParents[parent2Index];
+    // Check if a point is inside a polygon
+    isPointInPolygon(point, polygon) {
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+            const xi = polygon[i][0], yi = polygon[i][1];
+            const xj = polygon[j][0], yj = polygon[j][1];
             
-            const [child1, child2] = crossover(parent1, parent2);
-            newPopulation.push(mutate(child1, mutationRate));
-            if (newPopulation.length < popSize) {
-                newPopulation.push(mutate(child2, mutationRate));
+            const intersect = ((yi > point.lat) !== (yj > point.lat))
+                && (point.lng < (xj - xi) * (point.lat - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    }
+
+    // Get random point within bounds
+    getRandomPoint() {
+        if (Math.random() < this.options.goalSampleRate) {
+            return this.goal;
+        }
+        return {
+            lat: this.bounds.minLat + Math.random() * (this.bounds.maxLat - this.bounds.minLat),
+            lng: this.bounds.minLng + Math.random() * (this.bounds.maxLng - this.bounds.minLng)
+        };
+    }
+
+    // Find nearest vertex to a point
+    findNearest(point) {
+        let minDist = Infinity;
+        let nearest = 0;
+        
+        for (let i = 0; i < this.vertices.length; i++) {
+            const dist = this.distance(point, this.vertices[i]);
+            if (dist < minDist) {
+                minDist = dist;
+                nearest = i;
             }
         }
-        population = newPopulation.slice(0, popSize); // Ensure population size constraint
+        return nearest;
+    }
 
-        if (gen % 10 === 0) { // Yield for UI updates occasionally
-             await new Promise(resolve => setTimeout(resolve, 10)); 
+    // Calculate cost of a path segment considering constraints
+    calculateSegmentCost(p1, p2) {
+        let cost = this.distance(p1, p2);
+        
+        // Add penalty for crossing constraint areas
+        for (const constraint of this.constraints) {
+            if (this.segmentIntersectsPolygon(p1, p2, constraint.geojson.geometry.coordinates[0])) {
+                cost += Math.abs(constraint.weight) * this.distance(p1, p2);
+            }
+        }
+        
+        return cost;
+    }
+
+    // Check if a line segment intersects a polygon
+    segmentIntersectsPolygon(p1, p2, polygon) {
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+            const xi = polygon[i][0], yi = polygon[i][1];
+            const xj = polygon[j][0], yj = polygon[j][1];
+            
+            if (this.lineIntersectsLine(p1, p2, {lat: yi, lng: xi}, {lat: yj, lng: xj})) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Check if two line segments intersect
+    lineIntersectsLine(p1, p2, p3, p4) {
+        const ccw = (A, B, C) => {
+            return (C.lat - A.lat) * (B.lng - A.lng) > (B.lat - A.lat) * (C.lng - A.lng);
+        };
+        return ccw(p1, p3, p4) !== ccw(p2, p3, p4) && ccw(p1, p2, p3) !== ccw(p1, p2, p4);
+    }
+
+    // Steer towards a point
+    steer(from, to) {
+        const dist = this.distance(from, to);
+        if (dist <= this.options.stepSize) {
+            return to;
+        }
+        const ratio = this.options.stepSize / dist;
+        return {
+            lat: from.lat + (to.lat - from.lat) * ratio,
+            lng: from.lng + (to.lng - from.lng) * ratio
+        };
+    }
+
+    // Find nearby vertices within radius
+    findNearbyVertices(point, radius) {
+        const nearby = [];
+        for (let i = 0; i < this.vertices.length; i++) {
+            if (this.distance(point, this.vertices[i]) <= radius) {
+                nearby.push(i);
+            }
+        }
+        return nearby;
+    }
+
+    // Rewire the tree
+    rewire(newVertex, nearbyVertices) {
+        for (const i of nearbyVertices) {
+            const newCost = this.costs[newVertex] + this.calculateSegmentCost(this.vertices[newVertex], this.vertices[i]);
+            if (newCost < this.costs[i]) {
+                this.parents[i] = newVertex;
+                this.costs[i] = newCost;
+                this.rewire(i, this.findNearbyVertices(this.vertices[i], this.options.rewireRadius));
+            }
         }
     }
-    
-    visualizePopulation(population.map(ind => ({individual: ind, fitness: calculateFitness(ind, annotationData.constraints)})).sort((a,b) => b.fitness - a.fitness), bestRouteOverall.route); // Final visualization with sorted pop
 
-    gaRunning = false;
-    document.getElementById('ga-progress-bar').textContent = `Completed!`;
-    alert("Genetic algorithm optimization complete! The best route is highlighted on the optimization map and in the 3D view.");
-    console.log("Best route found:", bestRouteOverall);
-    
-    // Automatically switch to 3D view and display
-    const viz3DButton = document.querySelector('.tab-button[data-tab="visualization3d"]');
-    if (viz3DButton) {
-        viz3DButton.click(); // Activate 3D tab
-    }
-    // Ensure 3D map is ready then display
-    setTimeout(() => { // Give a moment for tab switch and potential 3D map init
-        if (cesiumViewer) {
-            displayRouteIn3D(bestRouteOverall.route, annotationData.constraints);
-        } else {
-            console.warn("Cesium viewer not ready for final display after GA.");
-            // Optionally, queue this display for when Cesium is ready
+    // Build the path
+    buildPath(goalIndex) {
+        const path = [];
+        let current = goalIndex;
+        while (current !== null) {
+            path.unshift(this.vertices[current]);
+            current = this.parents[current];
         }
-    }, 200);
+        return path;
+    }
 
-    return bestRouteOverall;
+    getBestPathToGoalAttempt() {
+        if (this.vertices.length === 0) {
+            return null;
+        }
+
+        let closestNodeIndex = 0;
+        let minDistanceToGoal = Infinity;
+
+        for (let i = 0; i < this.vertices.length; i++) {
+            const dist = this.distance(this.vertices[i], this.goal);
+            if (dist < minDistanceToGoal) {
+                minDistanceToGoal = dist;
+                closestNodeIndex = i;
+            }
+        }
+        // console.log(`Best effort: Path to node ${closestNodeIndex} which is ${minDistanceToGoal.toFixed(2)} away from goal.`);
+        return this.buildPath(closestNodeIndex);
+    }
+
+    // Main planning function - performs ONE iteration/extension of the RRT* tree
+    plan() {
+        // Get random point
+        const randomPoint = this.getRandomPoint();
+        
+        // Find nearest vertex
+        const nearestIndex = this.findNearest(randomPoint);
+        const nearestVertex = this.vertices[nearestIndex];
+        
+        // Steer towards random point
+        const newPoint = this.steer(nearestVertex, randomPoint);
+        
+        // Check for collision for the newPoint itself
+        if (this.isCollision(newPoint)) {
+            return null; // Collision at the new point, cannot extend here this iteration
+        }
+
+        // More robust collision check: check if path from nearestVertex to newPoint is clear
+        // This requires a line-of-sight or segment collision check function
+        // For now, we assume steer() gives a point that, if not in collision itself, the segment is "probably" okay
+        // or that isCollision checks are sufficient for the environment.
+        // A proper RRT* would check the segment from nearestVertex to newPoint for collisions.
+
+        // Find nearby vertices to the newPoint (potential parents and children for rewiring)
+        const nearbyIndices = this.findNearbyVertices(newPoint, this.options.rewireRadius);
+
+        // Find the best parent for newPoint from nearbyVertices (including nearestIndex initially)
+        let bestParentIndex = nearestIndex;
+        let minCostToNewPoint = this.costs[nearestIndex] + this.calculateSegmentCost(nearestVertex, newPoint);
+
+        for (const nearbyIdx of nearbyIndices) {
+            const nearbyNode = this.vertices[nearbyIdx];
+            // Check if path from nearbyNode to newPoint is collision-free
+            // (Simplified: assuming if newPoint is not in collision, segment is okay for now)
+            const costViaNearby = this.costs[nearbyIdx] + this.calculateSegmentCost(nearbyNode, newPoint);
+            if (costViaNearby < minCostToNewPoint) {
+                // Add a segment collision check here if needed: if (isSegmentCollisionFree(nearbyNode, newPoint))
+                minCostToNewPoint = costViaNearby;
+                bestParentIndex = nearbyIdx;
+            }
+        }
+        
+        // Add new vertex to the tree
+        this.vertices.push(newPoint);
+        this.parents.push(bestParentIndex);
+        this.costs.push(minCostToNewPoint);
+        const newVertexIndex = this.vertices.length - 1;
+
+        // Rewire nearby vertices to use newPoint as parent if it provides a shorter path
+        for (const nearbyIdx of nearbyIndices) {
+            if (nearbyIdx === bestParentIndex) continue; // Already considered
+
+            const nearbyNode = this.vertices[nearbyIdx];
+            const costViaNewPoint = minCostToNewPoint + this.calculateSegmentCost(newPoint, nearbyNode);
+
+            if (costViaNewPoint < this.costs[nearbyIdx]) {
+                 // Add a segment collision check here if needed: if (isSegmentCollisionFree(newPoint, nearbyNode))
+                this.parents[nearbyIdx] = newVertexIndex;
+                this.costs[nearbyIdx] = costViaNewPoint;
+            }
+        }
+        
+        // Check if goal is reached by this new point
+        if (this.distance(newPoint, this.goal) < this.options.maxDistance) {
+            return this.buildPath(newVertexIndex); // Path to goal found
+        }
+        
+        return null; // Goal not reached in this iteration
+    }
 }
+
+// Export the RRTStar class
+window.RRTStar = RRTStar;

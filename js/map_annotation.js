@@ -1,8 +1,11 @@
 let annotationMap, drawControl, drawnItems, startMarker, endMarker;
 const annotations = []; // Store {layer: L.Layer, type: string, weight: number, color: string}
+window.annotations = annotations; // Expose annotations globally
 
 function initAnnotationMap() {
     annotationMap = L.map('map-annotation').setView([-25.27, 133.77], 4); // Centered on Australia
+    window.annotationMap = annotationMap; // Expose annotationMap globally
+    console.log('Annotation map initialized and set to window.annotationMap:', window.annotationMap); // DEBUG LOG
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(annotationMap);
@@ -42,9 +45,8 @@ function initAnnotationMap() {
     document.getElementById('set-start-point').addEventListener('click', () => setPointMode('start'));
     document.getElementById('set-end-point').addEventListener('click', () => setPointMode('end'));
     document.getElementById('random-annotate').addEventListener('click', randomlyAnnotate);
-
-    // Pre-load Australia and Ocean data
-    loadPredefinedAreas();
+    document.getElementById('save-annotations').addEventListener('click', saveAnnotations);
+    document.getElementById('load-annotations').addEventListener('click', loadAnnotations);
 }
 
 async function loadPredefinedAreas() {
@@ -350,12 +352,12 @@ function randomlyAnnotate() {
     annotations.length = 0; // Clear the array
     if (startMarker) {
         annotationMap.removeLayer(startMarker);
-        startMarker = null;
+        window.startMarker = startMarker = null;
         document.getElementById('start-point-coords').textContent = 'Start: Not Set';
     }
     if (endMarker) {
         annotationMap.removeLayer(endMarker);
-        endMarker = null;
+        window.endMarker = endMarker = null;
         document.getElementById('end-point-coords').textContent = 'End: Not Set';
     }
 
@@ -374,8 +376,8 @@ function randomlyAnnotate() {
     // Generate random start point
     const startLat = getRandom(minLat, maxLat);
     const startLng = getRandom(minLng, maxLng);
-    startMarker = L.marker([startLat, startLng], { draggable: true, icon: L.icon({iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png', iconSize: [25,41], iconAnchor: [12,41]}) }).addTo(annotationMap);
-    startMarker.bindPopup("Start Point").openPopup();
+    window.startMarker = startMarker = L.marker([startLat, startLng], { draggable: true, icon: L.icon({iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png', iconSize: [25,41], iconAnchor: [12,41]}) }).addTo(annotationMap);
+    window.startMarker.bindPopup("Start Point").openPopup();
     document.getElementById('start-point-coords').textContent = `Start: ${startLat.toFixed(4)}, ${startLng.toFixed(4)}`;
 
     // Generate random end point (ensure it's somewhat distant from start)
@@ -385,8 +387,8 @@ function randomlyAnnotate() {
         endLng = getRandom(minLng, maxLng);
     } while (getDistance({lat: startLat, lng: startLng}, {lat: endLat, lng: endLng}) < (Math.max(maxLat-minLat, maxLng-minLng) * 0.2)); // Ensure at least 20% of map span away
 
-    endMarker = L.marker([endLat, endLng], { draggable: true, icon: L.icon({iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png', iconSize: [25,41], iconAnchor: [12,41]}) }).addTo(annotationMap);
-    endMarker.bindPopup("End Point").openPopup();
+    window.endMarker = endMarker = L.marker([endLat, endLng], { draggable: true, icon: L.icon({iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png', iconSize: [25,41], iconAnchor: [12,41]}) }).addTo(annotationMap);
+    window.endMarker.bindPopup("End Point").openPopup();
     document.getElementById('end-point-coords').textContent = `End: ${endLng.toFixed(4)}, ${endLat.toFixed(4)}`;
 
 
@@ -452,13 +454,13 @@ function setPointMode(mode) {
     annotationMap.once('click', function(e) {
         if (currentPointMode === 'start') {
             if (startMarker) annotationMap.removeLayer(startMarker);
-            startMarker = L.marker(e.latlng, { draggable: true, icon: L.icon({iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png', iconSize: [25,41], iconAnchor: [12,41]}) }).addTo(annotationMap);
-            startMarker.bindPopup("Start Point").openPopup();
+            window.startMarker = startMarker = L.marker(e.latlng, { draggable: true, icon: L.icon({iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png', iconSize: [25,41], iconAnchor: [12,41]}) }).addTo(annotationMap);
+            window.startMarker.bindPopup("Start Point").openPopup();
             document.getElementById('start-point-coords').textContent = `Start: ${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
         } else if (currentPointMode === 'end') {
             if (endMarker) annotationMap.removeLayer(endMarker);
-            endMarker = L.marker(e.latlng, { draggable: true, icon: L.icon({iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png', iconSize: [25,41], iconAnchor: [12,41]}) }).addTo(annotationMap); // Different icon or color
-            endMarker.bindPopup("End Point").openPopup();
+            window.endMarker = endMarker = L.marker(e.latlng, { draggable: true, icon: L.icon({iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png', iconSize: [25,41], iconAnchor: [12,41]}) }).addTo(annotationMap); // Different icon or color
+            window.endMarker.bindPopup("End Point").openPopup();
             document.getElementById('end-point-coords').textContent = `End: ${e.latlng.lng.toFixed(4)}, ${e.latlng.lat.toFixed(4)}`;
         }
         annotationMap.getContainer().style.cursor = '';
@@ -481,4 +483,114 @@ function getAnnotationData() {
             readableType: a.readableType
         }))
     };
+}
+
+function saveAnnotations() {
+    const data = getAnnotationData();
+    if (!data) return;
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'map_annotations.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function loadAnnotations() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    
+    input.onchange = function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                
+                // Clear existing annotations
+                drawnItems.clearLayers();
+                annotations.length = 0;
+                if (startMarker) {
+                    annotationMap.removeLayer(startMarker);
+                    startMarker = null;
+                }
+                if (endMarker) {
+                    annotationMap.removeLayer(endMarker);
+                    endMarker = null;
+                }
+
+                // Load start and end points
+                if (data.startPoint) {
+                    startMarker = L.marker([data.startPoint.lat, data.startPoint.lng], { 
+                        draggable: true,
+                        icon: L.icon({
+                            iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+                            iconSize: [25,41],
+                            iconAnchor: [12,41]
+                        })
+                    }).addTo(annotationMap);
+                    startMarker.bindPopup("Start Point").openPopup();
+                    document.getElementById('start-point-coords').textContent = 
+                        `Start: ${data.startPoint.lat.toFixed(4)}, ${data.startPoint.lng.toFixed(4)}`;
+                }
+
+                if (data.endPoint) {
+                    endMarker = L.marker([data.endPoint.lat, data.endPoint.lng], {
+                        draggable: true,
+                        icon: L.icon({
+                            iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+                            iconSize: [25,41],
+                            iconAnchor: [12,41]
+                        })
+                    }).addTo(annotationMap);
+                    endMarker.bindPopup("End Point").openPopup();
+                    document.getElementById('end-point-coords').textContent = 
+                        `End: ${data.endPoint.lng.toFixed(4)}, ${data.endPoint.lat.toFixed(4)}`;
+                }
+
+                // Load constraints
+                if (data.constraints) {
+                    data.constraints.forEach(constraint => {
+                        const layer = L.geoJSON(constraint.geojson, {
+                            style: {
+                                color: constraint.color,
+                                fillColor: constraint.color,
+                                weight: 2,
+                                fillOpacity: 0.4
+                            }
+                        }).getLayers()[0];
+                        
+                        layer.bindTooltip(constraint.readableType, { permanent: false, direction: 'top' });
+                        drawnItems.addLayer(layer);
+                        annotations.push({
+                            layer: layer,
+                            type: constraint.type,
+                            weight: constraint.weight,
+                            geojson: constraint.geojson,
+                            readableType: constraint.readableType
+                        });
+                    });
+                }
+
+                // Fit bounds to show all items
+                if (drawnItems.getLayers().length > 0) {
+                    const allItemsForBounds = new L.FeatureGroup([...drawnItems.getLayers(), startMarker, endMarker].filter(Boolean));
+                    annotationMap.fitBounds(allItemsForBounds.getBounds().pad(0.1));
+                }
+            } catch (error) {
+                console.error('Error loading annotations:', error);
+                alert('Error loading annotations file. Please make sure it\'s a valid JSON file.');
+            }
+        };
+        reader.readAsText(file);
+    };
+    
+    input.click();
 }
